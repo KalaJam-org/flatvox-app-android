@@ -3,19 +3,20 @@ package com.example.flatvox.recorder
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
+import android.media.*
 import android.os.Bundle
 import android.os.Environment
-import android.view.KeyEvent
-import android.view.View
 import android.widget.Button
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.android.volley.RequestQueue
+import com.android.volley.toolbox.Volley
 import com.example.flatvox.R
-import java.io.*
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.experimental.and
@@ -31,8 +32,11 @@ class Recorder : Activity() {
     private var output: String? = null
     private var recorder: AudioRecord? = null
     private var state: Boolean = false
+    private var requestQueue: RequestQueue? = null
+    private var formerPlayer: MediaPlayer? = null
 
     private var recordButton: RecordButton? = null
+    private var submitButton: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,12 +53,16 @@ class Recorder : Activity() {
             }
         }
 
+        requestQueue = Volley.newRequestQueue(baseContext.applicationContext)
+
         recordButton = RecordButton(
-                findViewById(R.id.rec_btn),
+                findViewById(R.id.btn_record),
                 R.drawable.rec_btn,
                 R.drawable.stop_rec_btn,
                 startWithPermissionCheck,
                 { stopRecording() })
+
+        submitButton = findViewById(R.id.btn_submit);
 
         output = Environment.getExternalStorageDirectory().absolutePath + "/recording.wav"
     }
@@ -68,6 +76,7 @@ class Recorder : Activity() {
                 AudioFormat.ENCODING_PCM_16BIT,
                 2 * minBufSize)
 
+            playAudio()
             recorder!!.startRecording()
 
             state = true
@@ -93,6 +102,7 @@ class Recorder : Activity() {
             recorder!!.release()
             recorder = null
             recordingThread = null
+            formerPlayer!!.stop()
 
             val inFile = File(Environment.getExternalStorageDirectory(), "recording.pcm")
             val numberOfSamples = inFile.length().toInt() / 2
@@ -137,6 +147,14 @@ class Recorder : Activity() {
             .put("data".toByteArray())
             .put(littleBuffer.copyOfRange(24, 28))
             .array()
+    }
+
+    private fun playAudio() {
+        val path: String = Environment.getExternalStorageDirectory().toString() + "/former.wav";
+        formerPlayer = MediaPlayer()
+        formerPlayer!!.setDataSource(path)
+        formerPlayer!!.prepare()
+        formerPlayer!!.start()
     }
 
     inner class RecordingRunnable : Runnable {
