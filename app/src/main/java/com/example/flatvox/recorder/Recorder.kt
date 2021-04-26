@@ -10,9 +10,7 @@ import android.widget.Button
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.android.volley.RequestQueue
-import com.android.volley.toolbox.Volley
-import com.example.flatvox.R
+import com.example.flatvox.*
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -20,6 +18,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.experimental.and
+import kotlin.experimental.or
 
 
 class Recorder : Activity() {
@@ -32,7 +31,6 @@ class Recorder : Activity() {
     private var output: String? = null
     private var recorder: AudioRecord? = null
     private var state: Boolean = false
-    private var requestQueue: RequestQueue? = null
     private var formerPlayer: MediaPlayer? = null
 
     private var recordButton: RecordButton? = null
@@ -52,8 +50,6 @@ class Recorder : Activity() {
                 startRecording()
             }
         }
-
-        requestQueue = Volley.newRequestQueue(baseContext.applicationContext)
 
         recordButton = RecordButton(
                 findViewById(R.id.btn_record),
@@ -105,48 +101,18 @@ class Recorder : Activity() {
             formerPlayer!!.stop()
 
             val inFile = File(Environment.getExternalStorageDirectory(), "recording.pcm")
-            val numberOfSamples = inFile.length().toInt() / 2
+            val formerRecord = File(Environment.getExternalStorageDirectory(), "former.wav").readBytes()
 
-            val inStream = FileInputStream(inFile)
-            val os = FileOutputStream(output)
-            os.write(createWavHeader(numberOfSamples, SAMPLING_RATE))
+            val merged = mergeAudio(formerRecord, inFile.readBytes(), SAMPLING_RATE)
 
-            val bytes = inStream.readBytes()
-            os.write(bytes)
+            val outFile = FileOutputStream(File(Environment.getExternalStorageDirectory(), "merged.wav"))
 
-            inStream.close()
-            os.close()
-
-            inFile.delete()
+            outFile.write(merged.toByteArray())
+            outFile.flush()
+            outFile.close()
         }else{
             Toast.makeText(this, "You are not recording right now!", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun createWavHeader(sampleNum: Int, sampleRate: Int): ByteArray {
-        // fill little indians
-        val littleBuffer = ByteBuffer.allocate(28)
-            .order(ByteOrder.LITTLE_ENDIAN)
-            .putInt(36 + sampleNum* 2)  // chunk length
-            .putInt(16) // chunk length
-            .putShort(1) // sample format pcm
-            .putShort(1) // channels
-            .putInt(sampleRate) //sample Rate
-            .putInt(sampleRate * 2) // byte rate (sample rate * block align)
-            .putShort(4)  // block align (channel count * bytes per sample)
-            .putShort(16) // bits per sample
-            .putInt(sampleNum * 2) // data length
-            .array()
-
-        return ByteBuffer.allocate(44)
-            .put("RIFF".toByteArray())
-            .put(littleBuffer.copyOfRange(0, 4))
-            .put("WAVE".toByteArray())
-            .put("fmt ".toByteArray())
-            .put(littleBuffer.copyOfRange(4, 24))
-            .put("data".toByteArray())
-            .put(littleBuffer.copyOfRange(24, 28))
-            .array()
     }
 
     private fun playAudio() {
@@ -178,18 +144,6 @@ class Recorder : Activity() {
             } catch (e: IOException) {
                 throw RuntimeException("Writing of recorded audio failed", e)
             }
-        }
-
-        //Conversion of short to byte
-        private fun short2byte(sData: ShortArray): ByteArray {
-            val shortArrsize = sData.size
-            val bytes = ByteArray(shortArrsize * 2)
-            for (i in 0 until shortArrsize) {
-                bytes[i * 2] = (sData[i] and 0x00FF).toByte()
-                bytes[i * 2 + 1] = (sData[i].toInt() shr 8).toByte()
-                sData[i] = 0
-            }
-            return bytes
         }
 
         private fun getBufferReadFailureReason(errorCode: Int): String {
